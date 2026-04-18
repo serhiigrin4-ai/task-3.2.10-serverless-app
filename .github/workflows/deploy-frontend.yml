@@ -1,0 +1,41 @@
+name: Deploy Frontend (React)
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'packages/frontend/**'
+
+jobs:
+  deploy-site:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Workspace Dependencies
+        run: yarn install
+
+      - name: Build React App
+        working-directory: ./packages/frontend
+        run: yarn build
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Deploy to S3
+        # React компілює готовий сайт у папку build
+        working-directory: ./packages/frontend/build
+        run: aws s3 sync . s3://serhiigrin4-website-bucket-01 --delete
+
+      - name: Invalidate CloudFront Cache
+        run: aws cloudfront create-invalidation --distribution-id E29RBIDKWFGJY2 --paths "/*"
