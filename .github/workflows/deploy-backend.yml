@@ -30,10 +30,14 @@ jobs:
 
       - name: Zip Backend Code
         working-directory: ./packages/backend
-        # Пакуємо тільки скомпільовані .js файли та залежності
-        # Прапорець -j ігнорує структуру папок і кладе файли в корінь архіву
         run: |
-          zip -j function.zip src/*.js
+          # Дивимось, куди yarn build поклав файли (для дебагу в логах Гітхаба)
+          ls -R 
+          
+          # Пакуємо всі .js файли, де б вони не були, ігноруючи структуру папок
+          find . -name "*.js" -not -path "*/node_modules/*" -exec zip -j function.zip {} +
+          
+          # Додаємо залежності
           zip -r function.zip node_modules/
 
       - name: Configure AWS Credentials
