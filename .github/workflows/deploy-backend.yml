@@ -37,30 +37,20 @@ jobs:
       - name: Create and Deploy Individual Lambda Packages
         working-directory: ./packages/backend
         run: |
-          # Список функцій, які ми знайшли у папці dist
           FUNCTIONS=("createNote" "deleteNote" "getNote" "listNotes" "updateNote")
           
           for func in "${FUNCTIONS[@]}"; do
             echo "-----------------------------------"
             echo "Processing function: $func"
             
-            # 1. Перевіряємо чи існує папка білду
-            if [ ! -d "dist/$func" ]; then
-              echo "Error: dist/$func not found. Skipping."
-              continue
-            fi
-
-            # 2. Створюємо ZIP-архів і кладемо туди app.js
             cd dist/$func
             zip -j ../../$func.zip app.js
             cd ../..
             
-            # 3. Спроба додати node_modules (якщо вони є в packages/backend)
             if [ -d "node_modules" ]; then
               zip -r $func.zip node_modules/
             fi
             
-            # 4. Визначаємо ім'я в AWS
             if [ "$func" == "listNotes" ]; then
               AWS_NAME="notes-list"
             else
@@ -68,9 +58,12 @@ jobs:
               AWS_NAME="notes-$BASE_NAME"
             fi
             
-            echo "Pushing code to AWS Lambda: $AWS_NAME"
+            echo "Updating code for: $AWS_NAME"
             aws lambda update-function-code --function-name $AWS_NAME --zip-file fileb://$func.zip
             
-            # Пауза, щоб уникнути ResourceConflictException
-            sleep 8
+            # Додаємо очікування завершення оновлення
+            echo "Waiting for $AWS_NAME to be active..."
+            aws lambda wait function-updated --function-name $AWS_NAME
+            
+            sleep 2
           done
