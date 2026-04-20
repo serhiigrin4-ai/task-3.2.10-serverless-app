@@ -1,2 +1,1 @@
-export const endpoint = process.env.AWS_ENDPOINT_URL || '';
-
+export const endpoint = process.env.AWS_ENDPOINT_URL || undefined;
