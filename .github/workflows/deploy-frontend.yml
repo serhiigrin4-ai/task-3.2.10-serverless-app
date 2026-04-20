@@ -37,6 +37,3 @@ jobs:
       - name: Deploy to S3
         working-directory: ./packages/frontend/dist
         run: aws s3 sync . s3://serhiigrin4-notes-frontend-app --delete
-
-      - name: Invalidate CloudFront Cache
-        run: aws cloudfront create-invalidation --distribution-id E29RBIDKWFGJY2 --paths "/*"
