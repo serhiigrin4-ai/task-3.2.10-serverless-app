@@ -2,9 +2,11 @@ name: Deploy Frontend (React)
 
 on:
   push:
+    branches:
+      - 'feat/**'
+      - dev
+  pull_request:
     branches: [dev]
-    paths:
-      - 'packages/frontend/**'
 
 jobs:
   deploy-site:

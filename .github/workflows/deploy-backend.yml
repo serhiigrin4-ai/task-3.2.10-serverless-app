@@ -2,9 +2,11 @@ name: Deploy Backend (Lambdas)
 
 on:
   push:
+    branches:
+      - 'feat/**'
+      - dev
+  pull_request:
     branches: [dev]
-    paths:
-      - 'packages/backend/**'
 
 jobs:
   deploy-lambdas:
