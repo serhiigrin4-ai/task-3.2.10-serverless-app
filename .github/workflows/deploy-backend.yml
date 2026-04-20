@@ -23,12 +23,18 @@ jobs:
       - name: Install Workspace Dependencies
         run: yarn install
 
+      - name: Build Backend
+        working-directory: ./packages/backend
+        # Ця команда створить .js файли з твоїх .ts файлів
+        run: yarn build
+
       - name: Zip Backend Code
         working-directory: ./packages/backend
+        # Пакуємо тільки скомпільовані .js файли та залежності
+        # Прапорець -j ігнорує структуру папок і кладе файли в корінь архіву
         run: |
-          cd src
-          zip -r ../function.zip .
-          cd ..
+          zip -j function.zip src/*.js
+          zip -r function.zip node_modules/
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -49,4 +55,3 @@ jobs:
           aws lambda update-function-code --function-name notes-update --zip-file fileb://function.zip
           sleep 5
           aws lambda update-function-code --function-name notes-delete --zip-file fileb://function.zip
-          
