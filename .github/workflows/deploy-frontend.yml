@@ -27,8 +27,8 @@ jobs:
         working-directory: ./packages/frontend
         run: yarn build
         env:
-          REACT_APP_API_URL: https://api.serhiigrin4-games.pp.ua
-          VITE_API_URL: https://api.serhiigrin4-games.pp.ua
+          REACT_APP_API_URL: https://api.serhiigrin4-games.pp.ua/
+          VITE_API_URL: https://api.serhiigrin4-games.pp.ua/
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
