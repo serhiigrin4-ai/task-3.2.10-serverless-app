@@ -49,3 +49,4 @@ jobs:
           aws lambda update-function-code --function-name notes-update --zip-file fileb://function.zip
           sleep 5
           aws lambda update-function-code --function-name notes-delete --zip-file fileb://function.zip
+          
