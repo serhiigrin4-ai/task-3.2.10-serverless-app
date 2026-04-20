@@ -37,12 +37,26 @@ jobs:
       - name: Create and Deploy Individual Lambda Packages
         working-directory: ./packages/backend
         run: |
+          set -e  # Зупиняти скрипт при помилках
           FUNCTIONS=("createNote" "deleteNote" "getNote" "listNotes" "updateNote")
           
           for func in "${FUNCTIONS[@]}"; do
             echo "-----------------------------------"
             echo "Processing function: $func"
             
+            # 1. Визначаємо ім'я в AWS
+            if [ "$func" == "listNotes" ]; then
+              AWS_NAME="notes-list"
+            else
+              BASE_NAME=$(echo $func | sed 's/Note//' | tr '[:upper:]' '[:lower:]')
+              AWS_NAME="notes-$BASE_NAME"
+            fi
+
+            # 2. ЧЕКАЄМО готовності (важливо для нових або тих, що оновлюються)
+            echo "Checking if $AWS_NAME is ready for updates..."
+            aws lambda wait function-active --function-name $AWS_NAME || true
+
+            # 3. Зипуємо (тільки app.js та node_modules)
             cd dist/$func
             zip -j ../../$func.zip app.js
             cd ../..
@@ -51,18 +65,12 @@ jobs:
               zip -r $func.zip node_modules/
             fi
             
-            if [ "$func" == "listNotes" ]; then
-              AWS_NAME="notes-list"
-            else
-              BASE_NAME=$(echo $func | sed 's/Note//' | tr '[:upper:]' '[:lower:]')
-              AWS_NAME="notes-$BASE_NAME"
-            fi
-            
+            # 4. ОНОВЛЮЄМО код
             echo "Updating code for: $AWS_NAME"
             aws lambda update-function-code --function-name $AWS_NAME --zip-file fileb://$func.zip
             
-            # Додаємо очікування завершення оновлення
-            echo "Waiting for $AWS_NAME to be active..."
+            # 5. ЧЕКАЄМО завершення процесу оновлення перед наступним кроком
+            echo "Waiting for $AWS_NAME update to complete..."
             aws lambda wait function-updated --function-name $AWS_NAME
             
             sleep 2
