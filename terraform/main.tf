@@ -12,9 +12,7 @@ provider "aws" {
   region = "us-east-1"
 }
 
-# ------------------------------------------------------
-# 1. DYNAMODB TABLE (База даних для нотаток)
-# ------------------------------------------------------
+# 1. DYNAMODB TABLE
 module "dynamodb_table" {
   source  = "terraform-aws-modules/dynamodb-table/aws"
   version = "~> 4.0"
@@ -26,34 +24,20 @@ module "dynamodb_table" {
   attributes = [
     { name = "id", type = "S" }
   ]
-
-  tags = {
-    Environment = "dev"
-    Project     = "ServerlessNotes"
-  }
 }
 
-# ------------------------------------------------------
-# 2. ACM CERTIFICATE (SSL Сертифікат для API)
-# ------------------------------------------------------
+# 2. ACM CERTIFICATE
 module "acm" {
   source  = "terraform-aws-modules/acm/aws"
   version = "~> 4.0"
 
   domain_name       = "api.serhiigrin4-games.pp.ua"
-  zone_id           = "Z096637118NQ3DZHCFEFV"
+  zone_id           = "Z09164682UAIEK9VY8Q0Y"
   validation_method = "DNS"
-
-  tags = {
-    Environment = "dev"
-  }
 }
 
-# ------------------------------------------------------
-# 3. AWS LAMBDA (5 Функцій для бекенду)
-# ------------------------------------------------------
+# 3. AWS LAMBDA (5 Functions)
 locals {
-  # Визначаємо маршрути та імена для 5 функцій з репозиторію
   lambdas = {
     "create" = { method = "POST", path = "/notes" }
     "list"   = { method = "GET", path = "/notes" }
@@ -69,12 +53,9 @@ module "lambda_functions" {
   for_each = local.lambdas
 
   function_name = "notes-${each.key}"
-  description   = "Notes App - ${each.key} function"
   handler       = "${each.key}.handler"
   runtime       = "nodejs18.x"
-
-  # Шлях до коду бекенду в завантаженому репозиторії
-  source_path = "../packages/backend"
+  source_path   = "../packages/backend"
 
   environment_variables = {
     TABLE_NAME = module.dynamodb_table.dynamodb_table_id
@@ -83,22 +64,14 @@ module "lambda_functions" {
   attach_policy_statements = true
   policy_statements = {
     dynamodb = {
-      effect = "Allow"
-      actions = [
-        "dynamodb:PutItem",
-        "dynamodb:GetItem",
-        "dynamodb:Scan",
-        "dynamodb:DeleteItem",
-        "dynamodb:UpdateItem"
-      ]
+      effect    = "Allow"
+      actions   = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:Scan", "dynamodb:DeleteItem", "dynamodb:UpdateItem"]
       resources = [module.dynamodb_table.dynamodb_table_arn]
     }
   }
 }
 
-# ------------------------------------------------------
-# 4. API GATEWAY (Точка входу)
-# ------------------------------------------------------
+# 4. API GATEWAY (HTTP API)
 module "api_gateway" {
   source  = "terraform-aws-modules/apigateway-v2/aws"
   version = "~> 3.0"
@@ -111,11 +84,10 @@ module "api_gateway" {
 
   cors_configuration = {
     allow_headers = ["content-type", "x-amz-date", "authorization", "x-api-key"]
-    allow_methods = ["ANY"]
+    allow_methods = ["*"]
     allow_origins = ["*"]
   }
 
-  # Динамічно створюємо 5 інтеграцій для API Gateway
   integrations = {
     for key, val in local.lambdas : "${val.method} ${val.path}" => {
       lambda_arn             = module.lambda_functions[key].lambda_function_arn
@@ -124,11 +96,9 @@ module "api_gateway" {
   }
 }
 
-# ------------------------------------------------------
-# 5. ROUTE 53 RECORD (Прив'язка домену до API Gateway)
-# ------------------------------------------------------
+# 5. ROUTE 53 RECORD
 resource "aws_route53_record" "api_dns" {
-  zone_id = "Z096637118NQ3DZHCFEFV"
+  zone_id = "Z09164682UAIEK9VY8Q0Y"
   name    = "api.serhiigrin4-games.pp.ua"
   type    = "A"
 
