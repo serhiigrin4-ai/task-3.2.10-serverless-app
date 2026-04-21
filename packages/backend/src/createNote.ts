@@ -20,7 +20,7 @@ export const handler = async (event: APIGatewayEvent) => {
   };
 
   try {
-    const client = new DynamoDBClient({endpoint});
+    const client = new DynamoDBClient({ endpoint });
     await client.send(new PutItemCommand(params));
     return success(params.Item);
   } catch (e) {

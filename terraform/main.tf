@@ -19,10 +19,10 @@ module "dynamodb_table" {
 
   name         = "notes-app-table"
   billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "id"
+  hash_key     = "noteId"
 
   attributes = [
-    { name = "id", type = "S" }
+    { name = "noteId", type = "S" }
   ]
 }
 
@@ -31,9 +31,15 @@ module "acm" {
   source  = "terraform-aws-modules/acm/aws"
   version = "~> 4.0"
 
-  domain_name       = "api.serhiigrin4-games.pp.ua"
-  zone_id           = "Z09164682UAIEK9VY8Q0Y"
-  validation_method = "DNS"
+  domain_name = "*.serhiigrin4-games.pp.ua"
+  zone_id     = "Z09164682UAIEK9VY8Q0Y"
+
+  subject_alternative_names = [
+    "serhiigrin4-games.pp.ua"
+  ]
+
+  validation_method   = "DNS"
+  wait_for_validation = true
 }
 
 # 3. AWS LAMBDA (5 Functions)
@@ -57,8 +63,10 @@ module "lambda_functions" {
   runtime       = "nodejs18.x"
   source_path   = "../packages/backend"
 
+  artifacts_dir = "builds/${each.key}"
+
   environment_variables = {
-    TABLE_NAME = module.dynamodb_table.dynamodb_table_id
+    NOTES_TABLE_NAME = module.dynamodb_table.dynamodb_table_id
   }
 
   attach_policy_statements = true
@@ -96,7 +104,7 @@ module "api_gateway" {
   }
 }
 
-# 5. ROUTE 53 RECORD
+# 5. ROUTE 53 RECORD FOR API
 resource "aws_route53_record" "api_dns" {
   zone_id = "Z09164682UAIEK9VY8Q0Y"
   name    = "api.serhiigrin4-games.pp.ua"
@@ -105,6 +113,82 @@ resource "aws_route53_record" "api_dns" {
   alias {
     name                   = module.api_gateway.apigatewayv2_domain_name_configuration[0].target_domain_name
     zone_id                = module.api_gateway.apigatewayv2_domain_name_configuration[0].hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
+# 6. S3 BUCKET FOR FRONTEND
+module "s3_bucket" {
+  source  = "terraform-aws-modules/s3-bucket/aws"
+  version = "~> 3.0"
+
+  bucket = "serhiigrin4-notes-frontend-new"
+  acl    = "private"
+
+  control_object_ownership = true
+  object_ownership         = "ObjectWriter"
+
+  website = {
+    index_document = "index.html"
+    error_document = "index.html"
+  }
+}
+
+# 7. CLOUDFRONT DISTRIBUTION
+module "cloudfront" {
+  source  = "terraform-aws-modules/cloudfront/aws"
+  version = "~> 3.0"
+
+  aliases = ["notes.serhiigrin4-games.pp.ua"]
+
+  comment             = "Notes App CloudFront"
+  enabled             = true
+  is_ipv6_enabled     = true
+  price_class         = "PriceClass_100"
+  wait_for_deployment = false
+
+  create_origin_access_control = true
+  origin_access_control = {
+    s3_oac = {
+      description      = "CloudFront access to S3"
+      origin_type      = "s3"
+      signing_behavior = "always"
+      signing_protocol = "sigv4"
+    }
+  }
+
+  origin = {
+    s3_oac = {
+      domain_name           = module.s3_bucket.s3_bucket_bucket_regional_domain_name
+      origin_access_control = "s3_oac"
+    }
+  }
+
+  default_cache_behavior = {
+    target_origin_id       = "s3_oac"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+    query_string           = false
+  }
+
+  viewer_certificate = {
+    acm_certificate_arn      = module.acm.acm_certificate_arn
+    ssl_support_method       = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2021"
+  }
+}
+
+# 8. ROUTE 53 RECORD FOR FRONTEND (ДОДАНО)
+resource "aws_route53_record" "frontend_dns" {
+  zone_id = "Z09164682UAIEK9VY8Q0Y"
+  name    = "notes.serhiigrin4-games.pp.ua"
+  type    = "A"
+
+  alias {
+    name                   = module.cloudfront.cloudfront_distribution_domain_name
+    zone_id                = module.cloudfront.cloudfront_distribution_hosted_zone_id
     evaluate_target_health = false
   }
 }

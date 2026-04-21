@@ -1,0 +1,1 @@
+{"filename": "builds/delete\\cb85e3439999b4ea3b4b5c31264c52f198d40c6f5de0fda9404987a23218fad1.zip", "runtime": "nodejs18.x", "artifacts_dir": "builds/delete", "build_plan": [[["npm", "nodejs18.x", "../packages/backend\\package.json", null, null], ["zip", "../packages/backend", null]]]}

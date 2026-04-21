@@ -27,7 +27,6 @@ jobs:
         working-directory: ./packages/frontend
         run: yarn build
         env:
-          REACT_APP_API_URL: https://api.serhiigrin4-games.pp.ua/
           VITE_API_URL: https://api.serhiigrin4-games.pp.ua/
 
       - name: Configure AWS Credentials
@@ -39,4 +38,7 @@ jobs:
 
       - name: Deploy to S3
         working-directory: ./packages/frontend/dist
-        run: aws s3 sync . s3://serhiigrin4-notes-frontend-app --delete
+        run: aws s3 sync . s3://serhiigrin4-notes-frontend-new --delete
+
+      - name: CloudFront Invalidation
+        run: aws cloudfront create-invalidation --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} --paths "/*"

@@ -1,0 +1,44 @@
+name: Full Deploy
+
+on:
+  push:
+    branches: [ dev, main ]
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+      
+      - name: Terraform Apply
+        run: |
+          terraform init
+          terraform apply -auto-approve
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+  deploy-backend:
+    needs: terraform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build & Zip Lambdas
+        run: |
+          cd packages/backend
+          npm install
+          npm run build
+          # Тут скрипт для зіпування кожної лямбди і aws lambda update-function-code
+
+  deploy-frontend:
+    needs: terraform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to S3
+        run: aws s3 sync packages/frontend/dist s3://serhiigrin4-notes-frontend-new --delete
+      
+      - name: CloudFront Invalidation
+        run: aws cloudfront create-invalidation --distribution-id ${{ secrets.CLOUDFRONT_ID }} --paths "/*"
