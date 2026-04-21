@@ -9,9 +9,6 @@ on:
 jobs:
   deploy-lambdas:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./terraform
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -21,21 +18,40 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Install Backend Dependencies
-        working-directory: ./packages/backend
+      - name: Install Workspace Dependencies
         run: yarn install
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - name: Build Backend
+        working-directory: ./packages/backend
+        run: yarn build
 
-      - name: Terraform Init
-        run: terraform init
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
 
-      - name: Terraform Apply
-        run: terraform apply -auto-approve
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      - name: Deploy Individual Packages
+        working-directory: ./packages/backend
+        run: |
+          FUNCTIONS=("createNote" "deleteNote" "getNote" "listNotes" "updateNote")
+          for func in "${FUNCTIONS[@]}"; do
+            # Визначаємо ім'я в AWS
+            if [ "$func" == "listNotes" ]; then AWS_NAME="notes-list";
+            else AWS_NAME="notes-$(echo $func | sed 's/Note//' | tr '[:upper:]' '[:lower:]')"; fi
+
+            # Очищуємо старі архіви та пакуємо новий
+            rm -f function.zip
+            cd dist/$func && zip -j ../../function.zip app.js && cd ../..
+            
+            # Додаємо node_modules, якщо вони є
+            [ -d "node_modules" ] && zip -r function.zip node_modules/
+
+            echo "Deploying $func to $AWS_NAME..."
+            aws lambda update-function-code --function-name $AWS_NAME --zip-file fileb://function.zip
+            
+            # Чекаємо, щоб AWS не лаявся на конфлікти
+            aws lambda wait function-updated --function-name $AWS_NAME
+            sleep 2
+          done
