@@ -1,0 +1,57 @@
+name: Deploy Backend (Lambdas)
+
+on:
+  push:
+    branches:
+      - 'feat/**'
+      - dev
+
+jobs:
+  deploy-lambdas:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Workspace Dependencies
+        run: yarn install
+
+      - name: Build Backend
+        working-directory: ./packages/backend
+        run: yarn build
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Deploy Individual Packages
+        working-directory: ./packages/backend
+        run: |
+          FUNCTIONS=("createNote" "deleteNote" "getNote" "listNotes" "updateNote")
+          for func in "${FUNCTIONS[@]}"; do
+            # Визначаємо ім'я в AWS
+            if [ "$func" == "listNotes" ]; then AWS_NAME="notes-list";
+            else AWS_NAME="notes-$(echo $func | sed 's/Note//' | tr '[:upper:]' '[:lower:]')"; fi
+
+            # Очищуємо старі архіви та пакуємо новий
+            rm -f function.zip
+            cd dist/$func && zip -j ../../function.zip app.js && cd ../..
+            
+            # Додаємо node_modules, якщо вони є
+            [ -d "node_modules" ] && zip -r function.zip node_modules/
+
+            echo "Deploying $func to $AWS_NAME..."
+            aws lambda update-function-code --function-name $AWS_NAME --zip-file fileb://function.zip
+            
+            # Чекаємо, щоб AWS не лаявся на конфлікти
+            aws lambda wait function-updated --function-name $AWS_NAME
+            sleep 2
+          done
