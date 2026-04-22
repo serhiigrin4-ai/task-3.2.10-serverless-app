@@ -1,134 +1,176 @@
-# 1. CLOUDWATCH DASHBOARD
+locals {
+  lambda_keys = ["create", "delete", "get", "list", "update"]
+}
+
+# ---------------------------------------------------------
+# 1. CLOUDWATCH DASHBOARD (Тільки стабільні метрики)
+# ---------------------------------------------------------
 resource "aws_cloudwatch_dashboard" "main" {
-  dashboard_name = "NotesApp-Dashboard-${local.env}"
+  dashboard_name = "NotesApp-Monitoring-${local.env}"
 
   dashboard_body = jsonencode({
-    widgets = [
-      # --- API GATEWAY METRICS ---
-      {
-        type = "metric"
-        x    = 0, y = 0, width = 12, height = 6
-        properties = {
-          metrics = [
-            ["AWS/ApiGateway", "5XXError", "ApiName", "notes-http-api"],
-            [".", "4XXError", ".", "."],
-            [".", "Count", ".", "."],
-            [".", "DataProcessed", ".", "."],
-            [".", "Unauthorized", ".", "."]
-          ]
-          view    = "timeSeries"
-          stacked = false
-          region  = "us-east-1"
-          title   = "API Gateway: Errors & Traffic"
-          period  = 300
-        }
-      },
-      {
-        type = "metric"
-        x    = 12, y = 0, width = 12, height = 6
-        properties = {
-          metrics = [
-            ["AWS/ApiGateway", "Latency", "ApiName", "notes-http-api"]
-          ]
-          view    = "timeSeries"
-          stacked = false
-          region  = "us-east-1"
-          title   = "API Gateway: Latency"
-          period  = 300
-        }
-      },
+    widgets = concat(
 
-      # --- LAMBDA METRICS ---
-      {
-        type = "metric"
-        x    = 0, y = 6, width = 12, height = 6
-        properties = {
-          metrics = [
-            for key in keys(local.lambdas) : ["AWS/Lambda", "Invocations", "FunctionName", "notes-${key}-${local.env}"]
-          ]
-          view    = "timeSeries"
-          stacked = false
-          region  = "us-east-1"
-          title   = "Lambda: Invocations"
-          period  = 300
+      # ---------------- API GATEWAY ----------------
+      [
+        {
+          type = "metric", x = 0, y = 0, width = 12, height = 6
+          properties = {
+            metrics = [
+              ["AWS/ApiGateway", "5XXError", "ApiName", "notes-http-api"],
+              [".", "4XXError", ".", "."],
+              [".", "Count", ".", "."],
+              [".", "Latency", ".", "."],
+              [".", "DataProcessed", ".", "."],
+              [".", "Unauthorized", ".", "."]
+            ]
+            stat   = "Sum"
+            period = 300
+            region = "us-east-1"
+            title  = "API Gateway Metrics"
+          }
         }
-      },
-      {
-        type = "metric"
-        x    = 12, y = 6, width = 12, height = 6
-        properties = {
-          metrics = [
-            for key in keys(local.lambdas) : ["AWS/Lambda", "ConcurrentExecutions", "FunctionName", "notes-${key}-${local.env}"]
-          ]
-          view    = "timeSeries"
-          stacked = false
-          region  = "us-east-1"
-          title   = "Lambda: Concurrent Executions & Throttles"
-        }
-      },
+      ],
 
-      # --- LAMBDA LOGS INSIGHTS (Cold Starts & Memory) ---
-      {
-        type = "log"
-        x    = 0, y = 12, width = 24, height = 6
-        properties = {
-          query         = "filter @type = 'REPORT' | stats max(@memorySize / 1000000) as MaxMemoryAllocatedMB, max(@maxMemoryUsed / 1000000) as MaxMemoryUsedMB, avg(@initDuration) as AvgColdStartTimeMS by @logStream | sort AvgColdStartTimeMS desc"
-          region        = "us-east-1"
-          stacked       = false
-          title         = "Lambda: Cold Starts & Memory Usage (Logs Insights)"
-          view          = "table"
-          logGroupNames = [for key in keys(local.lambdas) : "/aws/lambda/notes-${key}-${local.env}"]
+      # ---------------- LAMBDA METRICS ----------------
+      [
+        for i, name in local.lambda_keys : {
+          type   = "metric"
+          x      = (i % 2) * 12
+          y      = 6 + (floor(i / 2) * 6)
+          width  = 12
+          height = 6
+          properties = {
+            metrics = [
+              ["AWS/Lambda", "Invocations", "FunctionName", "notes-${name}-${local.env}"],
+              [".", "Errors", ".", "."],
+              [".", "Throttles", ".", "."],
+              [".", "Duration", ".", "."],
+              [".", "ConcurrentExecutions", ".", "."]
+            ]
+            stat   = "Average"
+            period = 300
+            region = "us-east-1"
+            title  = "Lambda: notes-${name}-${local.env}"
+          }
         }
-      },
+      ],
 
-      # --- DYNAMODB METRICS ---
-      {
-        type = "metric"
-        x    = 0, y = 18, width = 24, height = 6
-        properties = {
-          metrics = [
-            ["AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", module.dynamodb_table.dynamodb_table_id],
-            [".", "ConsumedWriteCapacityUnits", ".", "."],
-            [".", "SuccessfulRequestLatency", ".", "."]
-          ]
-          view    = "timeSeries"
-          stacked = false
-          region  = "us-east-1"
-          title   = "DynamoDB: Capacity & Latency"
-          period  = 300
+      # ---------------- COLD STARTS ----------------
+      [
+        {
+          type = "metric", x = 0, y = 24, width = 24, height = 6
+          properties = {
+            metrics = [
+              for name in local.lambda_keys :
+              ["Custom/Lambda", "ColdStartCount-${name}"]
+            ]
+            stat   = "Sum"
+            period = 300
+            region = "us-east-1"
+            title  = "Lambda Cold Starts"
+          }
         }
-      }
-    ]
+      ],
+
+      # ---------------- DYNAMODB ----------------
+      [
+        {
+          type = "metric", x = 0, y = 30, width = 24, height = 6
+          properties = {
+            metrics = [
+              ["AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", module.dynamodb_table.dynamodb_table_id],
+              [".", "ConsumedWriteCapacityUnits", ".", "."],
+              [".", "SuccessfulRequestLatency", ".", "."]
+            ]
+            stat   = "Average"
+            period = 300
+            region = "us-east-1"
+            title  = "DynamoDB Metrics"
+          }
+        }
+      ]
+    )
   })
 }
 
-# 2. CLOUDWATCH ALARMS
-resource "aws_cloudwatch_metric_alarm" "api_gw_5xx" {
-  alarm_name          = "api-gateway-5xx-errors-${local.env}"
+# ---------------------------------------------------------
+# 2. COLD START METRIC FILTERS
+# ---------------------------------------------------------
+resource "aws_cloudwatch_log_metric_filter" "cold_start" {
+  for_each       = toset(local.lambda_keys)
+  name           = "cold-start-${each.key}-${local.env}"
+  log_group_name = "/aws/lambda/notes-${each.key}-${local.env}"
+
+  pattern = "Init Duration"
+
+  metric_transformation {
+    name      = "ColdStartCount-${each.key}"
+    namespace = "Custom/Lambda"
+    value     = "1"
+    # БЕЗ dimensions - це ключ до відсутності 400-х помилок!
+  }
+}
+
+# ---------------------------------------------------------
+# 3. ALARMS
+# ---------------------------------------------------------
+resource "aws_cloudwatch_metric_alarm" "api_5xx" {
+  alarm_name          = "api-5xx-${local.env}"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "5XXError"
   namespace           = "AWS/ApiGateway"
   period              = 60
   statistic           = "Sum"
-  threshold           = 0
-  alarm_description   = "This metric monitors API Gateway for 5XX Server Errors"
-  treat_missing_data  = "notBreaching"
-
+  threshold           = 1
   dimensions = {
     ApiName = "notes-http-api"
   }
 }
 
+resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
+  for_each = toset(local.lambda_keys)
+
+  alarm_name          = "lambda-errors-${each.key}-${local.env}"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Errors"
+  namespace           = "AWS/Lambda"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 1
+  dimensions = {
+    FunctionName = "notes-${each.key}-${local.env}"
+  }
+}
+
 resource "aws_cloudwatch_metric_alarm" "lambda_throttles" {
-  alarm_name          = "lambda-throttles-${local.env}"
+  for_each = toset(local.lambda_keys)
+
+  alarm_name          = "lambda-throttles-${each.key}-${local.env}"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "Throttles"
   namespace           = "AWS/Lambda"
   period              = 60
   statistic           = "Sum"
-  threshold           = 0
-  alarm_description   = "Monitors if any Lambda functions are being throttled"
-  treat_missing_data  = "notBreaching"
+  threshold           = 1
+  dimensions = {
+    FunctionName = "notes-${each.key}-${local.env}"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "dynamodb_throttles" {
+  alarm_name          = "dynamodb-throttles-${local.env}"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ThrottledRequests"
+  namespace           = "AWS/DynamoDB"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 1
+  dimensions = {
+    TableName = module.dynamodb_table.dynamodb_table_id
+  }
 }
