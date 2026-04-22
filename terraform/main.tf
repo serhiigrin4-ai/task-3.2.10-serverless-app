@@ -12,7 +12,7 @@ provider "aws" {
   region = "us-east-1"
 }
 
-# Отримуємо ID твого поточного AWS-акаунту (щоб не хардкодити цифри)
+# Отримуємо ID твого поточного AWS-акаунту
 data "aws_caller_identity" "current" {}
 
 # 1. DYNAMODB TABLE
@@ -47,6 +47,8 @@ module "acm" {
 
 # 3. AWS LAMBDA
 locals {
+  env = "dev" # <--- ДОДАНО: ідентифікатор оточення
+
   lambdas = {
     "create" = { method = "POST", path = "/notes" }
     "list"   = { method = "GET", path = "/notes" }
@@ -61,17 +63,22 @@ module "lambda_functions" {
   version  = "~> 7.0"
   for_each = local.lambdas
 
-  function_name = "notes-${each.key}"
+  # <--- ЗМІНЕНО: Тепер назва містить оточення (напр. notes-create-dev)
+  function_name = "notes-${each.key}-${local.env}"
   handler       = "app.handler"
   runtime       = "nodejs18.x"
   source_path   = "../packages/backend"
   artifacts_dir = "builds/${each.key}"
 
+  # <--- ДОДАНО: Явне налаштування CloudWatch Log Groups
+  use_existing_cloudwatch_log_group = false
+  cloudwatch_logs_retention_in_days = 7
+
   environment_variables = {
     NOTES_TABLE_NAME = module.dynamodb_table.dynamodb_table_id
   }
 
-  # Перепустка для API Gateway (ВИПРАВЛЕНО)
+  # Перепустка для API Gateway
   create_current_version_allowed_triggers = false
   allowed_triggers = {
     AllowExecutionFromAPIGateway = {

@@ -37,9 +37,9 @@ jobs:
         run: |
           FUNCTIONS=("createNote" "deleteNote" "getNote" "listNotes" "updateNote")
           for func in "${FUNCTIONS[@]}"; do
-            # Визначаємо ім'я в AWS
-            if [ "$func" == "listNotes" ]; then AWS_NAME="notes-list";
-            else AWS_NAME="notes-$(echo $func | sed 's/Note//' | tr '[:upper:]' '[:lower:]')"; fi
+            # ДОДАНО -dev В КІНЕЦЬ ІМЕНІ
+            if [ "$func" == "listNotes" ]; then AWS_NAME="notes-list-dev";
+            else AWS_NAME="notes-$(echo $func | sed 's/Note//' | tr '[:upper:]' '[:lower:]')-dev"; fi
 
             # Очищуємо старі архіви та пакуємо новий
             rm -f function.zip
