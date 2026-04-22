@@ -5,11 +5,9 @@ on:
     branches:
       - 'feat/**'
       - dev
-  pull_request:
-    branches: [dev]
 
 jobs:
-  deploy-site:
+  deploy-frontend:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -20,14 +18,11 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Install Workspace Dependencies
-        run: yarn install
-
-      - name: Build React App
+      - name: Install and Build Frontend
         working-directory: ./packages/frontend
-        run: yarn build
-        env:
-          VITE_API_URL: https://api.serhiigrin4-games.pp.ua/
+        run: |
+          yarn install
+          yarn build
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -37,8 +32,7 @@ jobs:
           aws-region: us-east-1
 
       - name: Deploy to S3
-        working-directory: ./packages/frontend/dist
-        run: aws s3 sync . s3://serhiigrin4-notes-frontend-new --delete
-
+        run: aws s3 sync packages/frontend/dist s3://serhiigrin4-notes-frontend-new --delete
+      
       - name: CloudFront Invalidation
         run: aws cloudfront create-invalidation --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} --paths "/*"
